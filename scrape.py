@@ -276,7 +276,7 @@ def scrape_ARD(cursor, max_scrapes):
     print(f"--- Finished Tagesschau Scrape (Added {scraped_count} articles) ---")
 
 if __name__ == '__main__':
-    MAX_SCRAPES = 10
+    MAX_SCRAPES = 100
    
     conn = sqlite3.connect('database.db')
     c = conn.cursor()
