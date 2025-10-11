@@ -289,9 +289,10 @@ if __name__ == '__main__':
     conn.commit() 
 
     scrape_ARD(c, MAX_SCRAPES)
+    conn.commit()
 
 
     conn.close()
     
-    with open('logs.txt', 'a') as f:
+    with open('log.txt', 'a') as f:
         f.write("All scraping finished and database connection closed.\n")
