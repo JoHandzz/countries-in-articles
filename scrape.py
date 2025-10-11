@@ -6,10 +6,6 @@ import sqlite3
 import re
 
 
-
-
-
-
 def scrape_bbc(cursor, max_scrapes):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -280,21 +276,22 @@ def scrape_ARD(cursor, max_scrapes):
     print(f"--- Finished Tagesschau Scrape (Added {scraped_count} articles) ---")
 
 if __name__ == '__main__':
-
     MAX_SCRAPES = 10
-    # Connect to the database ONCE
+   
     conn = sqlite3.connect('database.db')
     c = conn.cursor()
 
-    # Run the scrapers sequentially
+    
     scrape_bbc(c, MAX_SCRAPES)
-    conn.commit() # Commit after the first scraper finishes
+    conn.commit() 
 
     scrape_dr(c, MAX_SCRAPES)
-    conn.commit() # Commit after the second scraper finishes
+    conn.commit() 
 
     scrape_ARD(c, MAX_SCRAPES)
 
-    # Close the connection ONCE at the very end
+
     conn.close()
-    print("All scraping finished and database connection closed.")
+    
+    with open('logs.txt', 'a') as f:
+        f.write("All scraping finished and database connection closed.\n")
