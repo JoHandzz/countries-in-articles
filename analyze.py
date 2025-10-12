@@ -1,46 +1,43 @@
 import spacy
 import demonym
 
-
-
-def find_countries(article_text, lookup_map, langugage):
+def find_countries(doc, lookup_map):
+    
     found_countries = set()
-    article_lower = article_text.lower()
+    article_lower = doc.text.lower() 
 
-    if langugage == "Danish":
-        nlp = spacy.load('da_core_news_sm')  
-
-    # MANGLER DE ANDRE LANDE
-    
-    doc = nlp(article_lower)
-    
-
-    # 2. Identify and collect all tokens belonging to recognized PERSON entities.
+    # Identify and collect tokens from PERSON entities to avoid false positives.
     person_tokens = set()
     for ent in doc.ents:
         if ent.label_ == 'PERSON':
             person_tokens.update({token.text for token in ent})
 
-    # Set of original words in text (excluding those in person_tokens)
+    # Create sets of words and their base forms (lemmas) from the document,
     words_in_text = {token.text for token in doc if token.text not in person_tokens}
-    
-    # Set of lemmatized root words (excluding those whose original token was in person_tokens)
     lemmas_in_text = {token.lemma_.lower() for token in doc if token.text not in person_tokens}
     
-    # 4. Iterate through the lookup map to find matches.
+    # 3. Iterate through the lookup map to find matches.
     for demonym, country in lookup_map.items():
-        if ' ' in demonym:  # Hadle multiword like costa rica
+        # Handle multi-word demonyms (e.g., "costa rican")
+        if ' ' in demonym:
             if demonym in article_lower:
                 found_countries.add(country)
         
-        #  Handle Single-word keys (e.g., "dansk", "german")
+        # Handle single-word demonyms 
         else:
+            # Check if the demonym matches a word or its base form in the text.
             if demonym in words_in_text or demonym in lemmas_in_text:
                 found_countries.add(country)
                 
     return ", ".join(sorted(list(found_countries)))
 
-txt = "En grøndlænder og en dansker går en tur. De spiser æbler og franske tærter. Det gør ham fra costa rica sur"
 
 
-print(find_countries(txt, demonym.DANISH, "Danish"))
+## Small test for the function
+
+nlp = spacy.load("da_core_news_sm")
+text = "en grønlænder spiser franske kager"
+doc = nlp(text.lower())
+demonym = demonym.DANISH
+
+print(find_countries(doc,demonym))
