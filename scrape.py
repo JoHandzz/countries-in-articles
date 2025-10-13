@@ -65,12 +65,25 @@ def scrape_bbc(cursor, max_scrapes):
                 type_nyhed = url_segments[3] if len(url_segments) > 3 else 'other'
 
             try:
-                article_response = requests.get(full_link, headers=headers, timeout=10)
+                article_response = requests.get(full_link)
                 article_response.raise_for_status()
                 article_soup = BeautifulSoup(article_response.text, 'lxml')
 
-                text_blocks = [p.text for p in article_soup.find_all('p')]
-                text_body = " ".join(text_blocks)
+                # Find the main <article> tag first
+                main_article = article_soup.find('article')
+
+                text_body = ""
+                if main_article:
+                    # Now, find all <p> tags only within the <article> tag
+                    text_blocks = [p.get_text(strip=True) for p in main_article.find_all('p')]
+                    text_body = " ".join(text_blocks)
+                else:
+                    print("Warning: Could not find the <article> tag. Falling back to old method.")
+                    # Fallback to your original method if <article> isn't found
+                    text_blocks = [p.get_text(strip=True) for p in article_soup.find_all('p')]
+                    text_body = " ".join(text_blocks)
+
+
 
                 cursor.execute("""INSERT OR IGNORE INTO articles 
                     (headline, URL, date, is_nyhed, type_article, text_body, countries, KM_index, language, media, processed) 
@@ -138,6 +151,9 @@ def scrape_dr(cursor, max_scrapes):
         else:
             is_nyhed = 0
             type_nyhed = 'other'
+        
+        if type_nyhed == "seneste":
+            continue
 
         text_body = get_dr_body(hyperlink)
         if text_body: # Only insert if we successfully got the body
@@ -294,5 +310,3 @@ if __name__ == '__main__':
 
     conn.close()
     
-    with open('log.txt', 'a') as f:
-        f.write("All scraping finished and database connection closed.\n")

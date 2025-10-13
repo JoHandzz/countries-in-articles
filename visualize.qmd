@@ -1,0 +1,136 @@
+---
+title: "figures"
+format: html
+editor: visual
+---
+
+## Import
+
+```{r}
+library(tidyverse)
+library(rstatix) 
+library(ggplot2)
+library(rnaturalearth)
+library(rnaturalearthdata)
+```
+
+```{r}
+articles_df <- read_delim("~/Desktop/Python/countries-in-articles/export_data/articles_long_format_v1.csv")
+```
+
+## Numbers
+
+```{r}
+# First, calculate the total number of articles for each media outlet.
+# This will be our denominator for the average calculation.
+total_articles_per_media <- articles_df |>
+  group_by(media) |>
+  summarise(total_articles = n(), .groups = 'drop')
+
+
+country_analysis <- articles_df |>
+  # Use separate_rows() to create a new row for each country.
+  separate_rows(countries, sep = ",") |>
+  # Clean up whitespace around country names
+  mutate(countries = str_trim(countries)) |>
+  # Count the number of times each country is mentioned for each media.
+  count(media, countries, name = "mentions") |>
+  # Join the total article counts back to our country mention data.
+  left_join(total_articles_per_media, by = "media") |>
+  # Calculate the rate
+  mutate(mentions_per_100_articles = (mentions / total_articles) * 100) %>%
+  # Arrange the results for clarity.
+  arrange(media, desc(mentions_per_100_articles))
+
+
+
+# The 10 most mentioned countries for each media 
+
+
+top_10_countries <- country_analysis |>
+  # Group the data by media outlet again to perform the next operation per group.
+  group_by(media) |>
+  # slice_max() selects the top N rows based on a variable.
+  slice_max(order_by = mentions_per_100_articles, n = 9) |>
+  ungroup()
+
+  
+```
+
+## Plots
+
+```{r}
+media_bar_v2 <- top_10_countries %>%
+  filter(countries != "NO_COUNTRIES") %>%
+  ggplot(aes(
+    # FIX 2: Reorder the countries based on the mention rate for better visualization
+    x = reorder(countries, mentions_per_100_articles), 
+    y = mentions_per_100_articles,
+    # Add a fill aesthetic to give each media a distinct color
+    fill = media
+    )) +
+  geom_col() + # geom_col() is a shortcut for geom_bar(stat = "identity")
+  # FIX 3 (Optional but Recommended): Flip coordinates to make country labels readable
+  coord_flip() +
+  labs(
+    title = "Top 10 Most Mentioned Countries by Media",
+    # Axes are flipped, so the labels need to be swapped
+    x = "Country",
+    y = "Mentions per 100 articles"
+  ) +
+  theme_minimal() +
+  # FIX 1: Use scales = "free_x" to give each facet its own x-axis.
+  # Note that because we used coord_flip(), "free_x" now refers to the vertical axis.
+  # We use "free_y" here to allow the horizontal axis (the mention rate) to adjust per facet.
+  facet_wrap(~ media, scales = "free") +
+  theme(legend.position = "none") # Hide the legend as the facet titles make it redundant
+
+
+# Display the plot
+media_bar_v2
+```
+
+## World map
+
+```{r}
+# 1. Aggregate data: Sum mentions for each country across all media.
+country_totals_for_map <- country_analysis %>%
+  filter(media == 'DR') |>
+  group_by(countries) %>%
+  summarise(total_mentions = sum(mentions_per_100_articles), .groups = 'drop') %>%
+  # 2. Clean country names to match the map data
+  mutate(name_for_join = case_when(
+    TRUE ~ countries
+  ))
+
+# 3. Get the world map spatial data
+world_map <- ne_countries(scale = "medium", returnclass = "sf")
+
+# 4. Join your mention data with the map data
+world_map_data <- world_map %>%
+  left_join(country_totals_for_map, by = c("name" = "name_for_join"))
+
+# 5. Create the map plot
+map_plot <- ggplot(data = world_map_data) +
+  geom_sf(aes(fill = total_mentions), color = "white", size = 0.2) +
+  # Use a nice color scale. `na.value` sets the color for countries with no data.
+  scale_fill_viridis_c(option = "plasma", na.value = "grey90", name = "Total Mentions\nper 100 Articles") +
+  labs(
+    title = "DR: Mentions of Countries",
+    subtitle = "Color intensity based on total mentions"
+  ) +
+  # Use a minimal theme for a clean map look
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold", margin = margin(b = 5)),
+    plot.subtitle = element_text(hjust = 0.5, size = 12, margin = margin(b = 10)),
+    legend.position = "bottom",
+    legend.key.width = unit(2.5, "cm"),
+    legend.title = element_text(size = 10, face = "bold"),
+    legend.text = element_text(size = 9)
+  )
+
+# 6. Display the map plot
+print(map_plot)
+
+```
