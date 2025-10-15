@@ -51,7 +51,7 @@ top_10_countries <- country_analysis |>
   # Group the data by media outlet again to perform the next operation per group.
   group_by(media) |>
   # slice_max() selects the top N rows based on a variable.
-  slice_max(order_by = mentions_per_100_articles, n = 9) |>
+  slice_max(order_by = mentions_per_100_articles, n = 10) |>
   ungroup()
 
   
@@ -96,6 +96,7 @@ media_bar_v2
 # 1. Aggregate data: Sum mentions for each country across all media.
 country_totals_for_map <- country_analysis %>%
   filter(media == 'DR') |>
+  filter(countries != 'Denmark') |>
   group_by(countries) %>%
   summarise(total_mentions = sum(mentions_per_100_articles), .groups = 'drop') %>%
   # 2. Clean country names to match the map data
