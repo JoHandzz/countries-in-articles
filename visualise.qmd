@@ -1,22 +1,26 @@
 ---
-title: "figures"
+title: "visualise, all articles"
 format: html
 editor: visual
 ---
 
-## Import
+# Import
 
 ```{r}
 library(tidyverse)
 library(rstatix) 
 library(ggplot2)
 library(tidytext)
+library(tidyr)
 library(rnaturalearth)
 library(rnaturalearthdata)
 library(ineq) # for making gini plot
 library(ggthemes)
 library(extrafont)
 library(dplyr)
+library(psych)
+library(sf)
+
 
 ```
 
@@ -27,10 +31,14 @@ articles_df <- read_delim("~/Desktop/Python/countries-in-articles/export_data/ar
 ```{r}
 # font_import()
 
-fonts()
+# fonts("IBM Plex Mono")
 ```
 
-## Numbers
+# Numbers
+
+## dataframes
+
+### country_analysis
 
 ```{r}
 # First, calculate the total number of articles for each media outlet.
@@ -77,8 +85,19 @@ mentions_per_100_articles: siger sig selv. Hvis man tager 100 artikler, hvor man
 
 share_of_voice: hvor stor en andel af al land-omtale for givent medie står dette land for
 
-```         
+### per_day
+
+```{r}
+per_day <- articles_df |>
+  filter(countries != "NO_COUNTRIES") |>  
+  group_by(media,date) |>
+  separate_rows(countries, sep = ",") |>
+  summarise(n_countries = n_distinct(countries), .groups = 'drop') |>
+  filter(media != 'ARD' | date != '2025-10-11') # remove later, var bare mærkelig
+  
 ```
+
+## Summaries
 
 ```{r}
 summary_stats <- country_analysis %>%
@@ -106,15 +125,11 @@ final_summary <- left_join(summary_stats, long_tail_avg, by = "media")
 
 final_summary
   
-
-
-
-  
-    
-  
 ```
 
-## Plots
+# Plots
+
+## Barplot - top 10
 
 ```{r}
 
@@ -151,109 +166,253 @@ media_bar <- top_10_countries |>
 media_bar
 ```
 
-```{r}
-library(forcats) 
+### Barplot - unique countries per day
 
+```{r}
+per_day |>
+  group_by(media) |>
+  summarise(mean_val = mean(n_countries), sd_val = sd(n_countries), .groups = 'drop') |>
+  ggplot(aes(x = media, y = mean_val, fill = media)) +
+  # Use 'geom_col()' for pre-summarised data
+  geom_col(width = 0.7, color = "black", linewidth = 0.5) +
+  geom_errorbar(aes(ymin = mean_val - sd_val, ymax = mean_val + sd_val),
+    width = 0.3, linewidth = 1.2, alpha = 0.8,color = "black" ) +
+  labs(
+    title = "Average Daily Number of Unique Countries Mentioned",
+    y = "Average Unique Countries per Day", 
+    x = "Media Outlet" 
+  ) +
+  theme_fivethirtyeight() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title = element_text(),
+    text = element_text(family = "IBM Plex Mono"),
+    legend.title = element_text(size = 200),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = colors_for_countries )
+
+
+```
+
+Undersøg om der er signifikant forskel.
+
+```{r}
+
+anova_result1 <- per_day |>
+  anova_test(
+    formula = n_countries ~ media, # Test the effect of 'media' on 'n_countries'
+    effect.size = "pes"
+  )
+
+get_anova_table(anova_result1)
+```
+
+mere data mangler, især for ARD
+
+```{r}
+
+# DR vs. ARD 
+t_test_DR_ARD <- per_day |>
+  filter(media %in% c("DR", "ARD")) |>
+  anova_test(
+    formula = n_countries ~ media, # Test the effect of 'media' on 'n_countries'
+    effect.size = "pes"
+  )
+
+get_anova_table(t_test_DR_ARD)
+
+
+# DR vs. BBC 
+t_test_DR_BBC <- per_day |>
+  filter(media %in% c("DR", "BBC")) |>
+  anova_test(
+    formula = n_countries ~ media, # Test the effect of 'media' on 'n_countries'
+    effect.size = "pes"
+  )
+
+get_anova_table(t_test_DR_BBC)
+
+```
+
+### Point plot DR
+
+```{r}
 country_analysis |>
   filter(media == 'DR') |>
-  # 1. Create a factor and order the levels by the mentions_per_100_articles
+  mutate(country_new = str_replace_all(countries, "United States of America", "USA")) |>
   mutate(
-    countries = fct_reorder(countries, mentions_per_100_articles, .desc = TRUE)
+    country_new = fct_reorder(country_new, mentions_per_100_articles, .desc = TRUE)
   ) |>
-  arrange(desc(mentions_per_100_articles)) |>
-  ggplot(aes(x = countries, y = mentions_per_100_articles)) +
-  geom_point() +
-  # Add theme element to handle overlapping labels
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  # 3. Use the NEW column 'country_new' for the x-aesthetic
+  ggplot(aes(x = country_new, y = mentions_per_100_articles)) +
+  geom_col() +
+  # REMOVED: geom_smooth(method = 'loess') as it's not appropriate for categorical X
+  labs(
+    title = "DR: all mentions of countries",
+    y = "Mentions per 100 articles"
+  ) +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title = element_text(),
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 5),
+    text = element_text(family = "IBM Plex Mono"),
+    legend.title = element_text(size = 200),
+    legend.position = "none"
+  )
+
 ```
 
 ## World map
 
 ```{r}
-# 1. Aggregate data: Sum mentions for each country across all media.
-country_totals_for_map <- country_analysis %>%
+country_totals_for_map <- country_analysis |>
   filter(media == 'DR') |>
-  filter(countries != 'Denmark') |>
-  group_by(countries) %>%
-  summarise(total_mentions = sum(mentions_per_100_articles), .groups = 'drop') %>%
-  # 2. Clean country names to match the map data
+  group_by(countries) |>
+  summarise(total_mentions = sum(mentions_per_100_articles), .groups = 'drop') |>
   mutate(name_for_join = case_when(
     TRUE ~ countries
   ))
 
-# 3. Get the world map spatial data
 world_map <- ne_countries(scale = "medium", returnclass = "sf")
 
-# 4. Join your mention data with the map data
+
 world_map_data <- world_map %>%
   left_join(country_totals_for_map, by = c("name" = "name_for_join"))
 
-# 5. Create the map plot
+# Create the map plot
 map_plot <- ggplot(data = world_map_data) +
   geom_sf(aes(fill = total_mentions), color = "white", size = 0.2) +
-  # Use a nice color scale. `na.value` sets the color for countries with no data.
-  scale_fill_viridis_c(option = "plasma", na.value = "grey90", name = "Total Mentions\nper 100 Articles") +
+  scale_fill_viridis_c(
+    option = "turbo", 
+    na.value = "grey90", 
+    name = "Total Mentions\nper 100 Articles"
+  ) +
   labs(
     title = "DR: Mentions of Countries",
-    subtitle = "Color intensity based on total mentions"
+    subtitle = "Color intensity based on total mentions (Home Country: Red)"
   ) +
-  # Use a minimal theme for a clean map look
-  theme_void() +
+  theme_void() + 
   theme(
     plot.title = element_text(hjust = 0.5, size = 18, face = "bold", margin = margin(b = 5)),
     plot.subtitle = element_text(hjust = 0.5, size = 12, margin = margin(b = 10)),
     legend.position = "bottom",
     legend.key.width = unit(2.5, "cm"),
     legend.title = element_text(size = 10, face = "bold"),
-    legend.text = element_text(size = 9)
+    legend.text = element_text(size = 9),
+    text = element_text(family = "IBM Plex Mono")
   )
 
-# 6. Display the map plot
+# 5. Display the map plot
 print(map_plot)
 
 ```
 
+### BBC
+
 ```{r}
-# 1. Aggregate data: Sum mentions for each country across all media.
-country_totals_for_map <- country_analysis %>%
+country_totals_for_map <- country_analysis |>
   filter(media == 'BBC') |>
-  filter(countries != 'United Kingdom') |>
-  group_by(countries) %>%
-  summarise(total_mentions = sum(mentions_per_100_articles), .groups = 'drop') %>%
-  # 2. Clean country names to match the map data
+  group_by(countries) |>
+  summarise(total_mentions = sum(mentions_per_100_articles), .groups = 'drop') |>
   mutate(name_for_join = case_when(
     TRUE ~ countries
   ))
 
-# 3. Get the world map spatial data
 world_map <- ne_countries(scale = "medium", returnclass = "sf")
 
-# 4. Join your mention data with the map data
+
 world_map_data <- world_map %>%
   left_join(country_totals_for_map, by = c("name" = "name_for_join"))
 
-# 5. Create the map plot
+# Create the map plot
 map_plot <- ggplot(data = world_map_data) +
   geom_sf(aes(fill = total_mentions), color = "white", size = 0.2) +
-  # Use a nice color scale. `na.value` sets the color for countries with no data.
-  scale_fill_viridis_c(option = "plasma", na.value = "grey90", name = "Total Mentions\nper 100 Articles") +
+  scale_fill_viridis_c(
+    option = "turbo", 
+    na.value = "grey90", 
+    name = "Total Mentions\nper 100 Articles"
+  ) +
   labs(
     title = "BBC: Mentions of Countries",
-    subtitle = "Color intensity based on total mentions"
+    subtitle = "Color intensity based on total mentions (Home Country: Red)"
   ) +
-  # Use a minimal theme for a clean map look
-  theme_void() +
+  theme_void() + 
   theme(
     plot.title = element_text(hjust = 0.5, size = 18, face = "bold", margin = margin(b = 5)),
     plot.subtitle = element_text(hjust = 0.5, size = 12, margin = margin(b = 10)),
     legend.position = "bottom",
     legend.key.width = unit(2.5, "cm"),
     legend.title = element_text(size = 10, face = "bold"),
-    legend.text = element_text(size = 9)
+    legend.text = element_text(size = 9),
+    text = element_text(family = "IBM Plex Mono")
   )
 
-# 6. Display the map plot
+# 5. Display the map plot
 print(map_plot)
+```
+
+### facet - alle tre
+
+```{r}
+
+country_totals_for_map <- country_analysis |>
+  group_by(media, countries) |>
+  summarise(total_mentions = sum(mentions_per_100_articles), .groups = 'drop') |>
+  mutate(name_for_join = countries)
+
+world_map <- ne_countries(scale = "medium", returnclass = "sf")
+
+media_outlets <- c("DR", "ARD", "BBC")
+
+map_template <- world_map |>
+  select(name, geometry) |>
+  # The use of st_drop_geometry() is key to separate the data and geometry before crossing
+  # Convert to a regular tibble for crossing, keeping 'name'
+  st_drop_geometry() %>% 
+  rename(name_for_join = name) %>%
+  # Use crossing to get all combinations of countries and media outlets
+  tidyr::crossing(media = media_outlets) 
+
+
+world_map_data <- map_template |>
+    left_join(world_map |> select(name, geometry), 
+              by = c("name_for_join" = "name"), 
+              relationship = "many-to-many") |>
+    st_as_sf() |>
+    left_join(country_totals_for_map, 
+              by = c("name_for_join", "media"), 
+              relationship = "many-to-many") |>
+    mutate(total_mentions = replace_na(total_mentions, 0))
+
+
+map_plot <- ggplot(data = world_map_data) +
+  geom_sf(aes(fill = total_mentions), color = "white", linewidth = 0.2) +
+  scale_fill_viridis_c(
+    option = "turbo",
+    na.value = "grey90", 
+    name = "Total Mentions\nper 100 Articles",
+    limits = c(0, max(world_map_data$total_mentions, na.rm = TRUE)) 
+  ) +
+  
+  facet_wrap(~ media) +
+  labs(
+    title = "Mentions of Countries Across Media Outlets",
+    subtitle = "Color intensity based on total mentions"
+  ) +
+  theme_void() + 
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold", margin = margin(b = 5)),
+    plot.subtitle = element_text(hjust = 0.5, size = 12, margin = margin(b = 10)),
+    legend.position = "bottom",
+    legend.key.width = unit(2.5, "cm"),
+    legend.title = element_text(size = 10, face = "bold"),
+    legend.text = element_text(size = 9),
+    strip.text = element_text(size = 12, face = "bold"),
+    text = element_text(family = "IBM Plex Mono")
+  )
+
+map_plot
 ```
 
 ## Violin plot
@@ -270,29 +429,30 @@ violin_plot <- country_analysis |>
     fill = media
   )) +
   geom_violin(alpha = 0.8) +
-  # scale_x_log10() +.   # jeg synes log er dårligt her
-  # Add a box 
   geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
   scale_x_reverse() + 
-  
-  # Add labels and a title
   labs(
     title = "Distribution of International News Coverage",
-    subtitle = "Mentions per 100 articles for each media outlet",
     x = "Mentions per 100 Articles",
     y = "Media Outlet"
   ) +
+  theme_fivethirtyeight() +
+  theme(
+    axis.title = element_text(),
+    axis.title.y = element_blank(),
+    text = element_text(family = "IBM Plex Mono"),
+    legend.title = element_text(size = 200),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = colors_for_countries )
   
-  # Use a clean theme and hide the legend (y-axis labels are sufficient)
-  theme_minimal() +
-  theme(legend.position = "none")
 
-# Display the plot
-print(violin_plot)
+
+violin_plot
 
 ```
 
-## 
+## Correlation (ikke fedt)
 
 ```{r}
 wide_data <- country_analysis %>%
