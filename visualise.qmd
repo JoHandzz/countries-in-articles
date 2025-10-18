@@ -97,6 +97,82 @@ per_day <- articles_df |>
   
 ```
 
+### countries_as_placings
+
+```{r}
+countries_as_placings <- country_analysis |>
+  group_by(media) |>
+  arrange(desc(mentions_per_100_articles), .by_group = TRUE) %>%
+  mutate(placing = row_number()) |>
+  select(media, placing, countries, mentions_per_100_articles) |>
+  ungroup()
+
+# Display the head of the new data frame
+print(head(countries_as_placings))
+```
+
+```{r}
+decay_plot <- countries_as_placings |>
+  ggplot(aes(
+    x = placing, 
+    y = mentions_per_100_articles, 
+    color = media, 
+    group = media
+  )) +
+  geom_line(linewidth = 1.2, alpha = 0.5) +
+  geom_point(size = 1.5, alpha = 0.8) +
+  scale_color_manual(
+    values = c("BBC" = "#012169", "DR" = "#C8102E", "ARD"="#FFCC00")) +
+  labs(
+    title = "Comparing Media Attention by Country Rank",
+    x = "Country Rank (Placing)",
+    y = "Mentions per 100 Articles",
+    color = "Media Outlet" # This sets the legend title
+  ) +
+  theme_fivethirtyeight() +
+  theme(
+    axis.title = element_text(),
+    legend.position = "bottom",
+    text = element_text(family = "IBM Plex Mono"),
+  )
+
+# Display the plot
+print(decay_plot)
+```
+
+```{r}
+decay_plot2 <- countries_as_placings |>
+   group_by(media) |>
+  arrange(desc(mentions_per_100_articles)) |>
+  slice(4:n()) |> ungroup() |>
+  ggplot(aes(
+    x = placing, 
+    y = mentions_per_100_articles, 
+    color = media, 
+    group = media
+  )) +
+  geom_line(linewidth = 1.2, alpha = 0.5) +
+  geom_point(size = 1.5, alpha = 0.8) +
+  scale_color_manual(
+    values = c("BBC" = "#012169", "DR" = "#C8102E", "ARD"="#FFCC00")) +
+  labs(
+    title = "Comparing Media Attention by Country Rank",
+    subtitle = "Excluding top 3 countries for each media",
+    x = "Country Rank (Placing)",
+    y = "Mentions per 100 Articles",
+    color = "Media Outlet" # This sets the legend title
+  ) +
+  theme_fivethirtyeight() +
+  theme(
+    axis.title = element_text(),
+    legend.position = "bottom",
+    text = element_text(family = "IBM Plex Mono"),
+  )
+
+# Display the plot
+print(decay_plot2)
+```
+
 ## Summaries
 
 ```{r}
@@ -422,7 +498,7 @@ map_plot
 violin_plot <- country_analysis |>
   group_by(media) |>
   arrange(desc(mentions_per_100_articles)) |>
-  slice(3:n()) |> ungroup() |> # exclude top 2 countries
+  slice(3:n()) |> ungroup() |>
   ggplot(aes(
     x = mentions_per_100_articles,
     y = media,
