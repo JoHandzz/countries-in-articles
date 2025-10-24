@@ -1,12 +1,23 @@
 ---
-title: "visualise, all articles"
-format: html
-editor: visual
+title: "Analysis of Country Mentions in DR, BBC and ARD"
+format:
+  pdf:
+    toc: true                
+    number-sections: true   
+    geometry: "margin=1in"   
+execute:
+  echo: false      
 ---
 
-# Import
+# Set-up
 
 ```{r}
+#| label: setup
+#| echo: false
+#| message: false
+#| warning: false
+
+
 library(tidyverse)
 library(rstatix) 
 library(ggplot2)
@@ -14,7 +25,7 @@ library(tidytext)
 library(tidyr)
 library(rnaturalearth)
 library(rnaturalearthdata)
-library(ineq) # for making gini plot
+library(ineq) # for making gini 
 library(ggthemes)
 library(extrafont)
 library(dplyr)
@@ -22,15 +33,34 @@ library(psych)
 library(sf)
 
 
+
 ```
 
+Dataen rengøres således at der for hvert medie er samme antal artikler per dag.
+
 ```{r}
-articles_df <- read_delim("~/Desktop/Python/countries-in-articles/export_data/articles_long_format_v1.csv")
+articles_df <- read_delim("~/Desktop/Python/countries-in-articles/export_data/articles_long_format_v1.csv") |>
+  filter(!(type_article%in% c('sport','sporten')))|>
+  add_count(media, date, name = "n_articles_per_media") |>
+  group_by(date) |>
+  mutate(min_daily_count = min(n_articles_per_media)) |>
+  ungroup() |>
+  filter(min_daily_count > 10) |>
+  group_by(media, date) |>
+  mutate(row_num = row_number()) |>
+  filter(row_num <= min_daily_count) |>
+  ungroup() |>
+  select(-n_articles_per_media, -min_daily_count, -row_num)
+
+
+glimpse(articles_df)
+  
 ```
+
+I denne analyse medtages 828 artikler
 
 ```{r}
 # font_import()
-
 # fonts("IBM Plex Mono")
 ```
 
@@ -49,9 +79,8 @@ total_articles_per_media <- articles_df |>
 
 
 country_analysis <- articles_df |>
-  filter(countries != "NO_COUNTRIES") |>  # Har ikke fundeet et sted hvor denne var brugebar
+  filter(countries != "NO_COUNTRIES") |>  # Har ikke fundeet et sted hvor disse var brugebar
   separate_rows(countries, sep = ",") |>
-  # Clean up whitespace around country names
   mutate(countries = str_trim(countries)) |>
   count(media, countries, name = "mentions") |>
   left_join(total_articles_per_media, by = "media") |>
@@ -66,16 +95,16 @@ country_analysis <- articles_df |>
 # The 10 most mentioned countries for each media 
 
 
-top_10_countries <- country_analysis %>%
-  group_by(media) %>%
-  # Select the 10 rows with the highest value in the mentions column.
-  # Crucially, with_ties = FALSE breaks any ties and guarantees only 10 rows.
+top_10_countries <- country_analysis |>
+  group_by(media) |>
   slice_max(
     order_by = mentions_per_100_articles, 
     n = 10, 
     with_ties = FALSE
-  ) %>%
+  ) |>
   ungroup() # Good practice to ungroup after you're done.
+
+glimpse(country_analysis)
   
 ```
 
@@ -92,8 +121,8 @@ per_day <- articles_df |>
   filter(countries != "NO_COUNTRIES") |>  
   group_by(media,date) |>
   separate_rows(countries, sep = ",") |>
-  summarise(n_countries = n_distinct(countries), .groups = 'drop') |>
-  filter(media != 'ARD' | date != '2025-10-11') # remove later, var bare mærkelig
+  summarise(n_countries = n_distinct(countries), .groups = 'drop') 
+
   
 ```
 
@@ -108,69 +137,7 @@ countries_as_placings <- country_analysis |>
   ungroup()
 
 # Display the head of the new data frame
-print(head(countries_as_placings))
-```
-
-```{r}
-decay_plot <- countries_as_placings |>
-  ggplot(aes(
-    x = placing, 
-    y = mentions_per_100_articles, 
-    color = media, 
-    group = media
-  )) +
-  geom_line(linewidth = 1.2, alpha = 0.5) +
-  geom_point(size = 1.5, alpha = 0.8) +
-  scale_color_manual(
-    values = c("BBC" = "#012169", "DR" = "#C8102E", "ARD"="#FFCC00")) +
-  labs(
-    title = "Comparing Media Attention by Country Rank",
-    x = "Country Rank (Placing)",
-    y = "Mentions per 100 Articles",
-    color = "Media Outlet" # This sets the legend title
-  ) +
-  theme_fivethirtyeight() +
-  theme(
-    axis.title = element_text(),
-    legend.position = "bottom",
-    text = element_text(family = "IBM Plex Mono"),
-  )
-
-# Display the plot
-print(decay_plot)
-```
-
-```{r}
-decay_plot2 <- countries_as_placings |>
-   group_by(media) |>
-  arrange(desc(mentions_per_100_articles)) |>
-  slice(4:n()) |> ungroup() |>
-  ggplot(aes(
-    x = placing, 
-    y = mentions_per_100_articles, 
-    color = media, 
-    group = media
-  )) +
-  geom_line(linewidth = 1.2, alpha = 0.5) +
-  geom_point(size = 1.5, alpha = 0.8) +
-  scale_color_manual(
-    values = c("BBC" = "#012169", "DR" = "#C8102E", "ARD"="#FFCC00")) +
-  labs(
-    title = "Comparing Media Attention by Country Rank",
-    subtitle = "Excluding top 3 countries for each media",
-    x = "Country Rank (Placing)",
-    y = "Mentions per 100 Articles",
-    color = "Media Outlet" # This sets the legend title
-  ) +
-  theme_fivethirtyeight() +
-  theme(
-    axis.title = element_text(),
-    legend.position = "bottom",
-    text = element_text(family = "IBM Plex Mono"),
-  )
-
-# Display the plot
-print(decay_plot2)
+glimpse(countries_as_placings)
 ```
 
 ## Summaries
@@ -180,12 +147,12 @@ summary_stats <- country_analysis %>%
   group_by(media) %>%
   summarise(
     n_countries = n_distinct(countries),
-    more_than_once = n_distinct(countries[mentions_per_100_articles > 2]),
+    more_than_once = n_distinct(countries[mentions_per_100_articles > 1]),
     gini_coefficient = Gini(mentions_per_100_articles),
-    .groups = 'drop' # Recommended to drop grouping after summarise
+    .groups = 'drop' 
   )
 
-# --- Analysis 2: Calculate the "long tail" average ---
+
 long_tail_avg <- country_analysis %>%
   group_by(media) %>%
   arrange(desc(mentions_per_100_articles)) %>%
@@ -195,13 +162,22 @@ long_tail_avg <- country_analysis %>%
     .groups = 'drop'
   )
 
-# --- Join the two results together ---
-# The 'by = "media"' argument tells the join to match rows based on the media column.
+
 final_summary <- left_join(summary_stats, long_tail_avg, by = "media")
 
 final_summary
   
 ```
+
+Generelle stats for hvert medie:
+
+1.  n_countries: antal af unikke lande nævnt i alle artiklerne
+
+2.  more_than_once: antal af unikke lande nævnt mere end 1 gang per 100 artikler
+
+3.  gini_coefficent: parametre fra økonomi, 0 er perfekt lighed og 1 maximum ulighed
+
+4.  avg_mentions: gennemsnitligt antal gange en lande bliver nævnt per 100 artikel (4 mest nævnt labde frasorteret)
 
 # Plots
 
@@ -242,7 +218,7 @@ media_bar <- top_10_countries |>
 media_bar
 ```
 
-### Barplot - unique countries per day
+## Barplot - unique countries per day
 
 ```{r}
 per_day |>
@@ -254,9 +230,16 @@ per_day |>
   geom_errorbar(aes(ymin = mean_val - sd_val, ymax = mean_val + sd_val),
     width = 0.3, linewidth = 1.2, alpha = 0.8,color = "black" ) +
   labs(
-    title = "Average Daily Number of Unique Countries Mentioned",
+    title = "Daily Number of Unique Countries",
     y = "Average Unique Countries per Day", 
     x = "Media Outlet" 
+  ) +
+  geom_text(
+    aes(label = round(mean_val, 1), y = mean_val / 2),
+    color = "white",
+    vjust = 0.5, 
+    fontface = "bold",
+    size = 6
   ) +
   theme_fivethirtyeight() +
   theme(
@@ -271,7 +254,7 @@ per_day |>
 
 ```
 
-Undersøg om der er signifikant forskel.
+Undersøg om der er signifikant forskel:
 
 ```{r}
 
@@ -283,8 +266,6 @@ anova_result1 <- per_day |>
 
 get_anova_table(anova_result1)
 ```
-
-mere data mangler, især for ARD
 
 ```{r}
 
@@ -311,35 +292,81 @@ get_anova_table(t_test_DR_BBC)
 
 ```
 
-### Point plot DR
+Her er en indsigt:
+
+**DR skriver om signifikant færre unikke lande end de to andre medier**
+
+## Decay plot
+
+Lad os kigge på fordelingen af mentions
 
 ```{r}
-country_analysis |>
-  filter(media == 'DR') |>
-  mutate(country_new = str_replace_all(countries, "United States of America", "USA")) |>
-  mutate(
-    country_new = fct_reorder(country_new, mentions_per_100_articles, .desc = TRUE)
-  ) |>
-  # 3. Use the NEW column 'country_new' for the x-aesthetic
-  ggplot(aes(x = country_new, y = mentions_per_100_articles)) +
-  geom_col() +
-  # REMOVED: geom_smooth(method = 'loess') as it's not appropriate for categorical X
+decay_plot <- countries_as_placings |>
+  ggplot(aes(
+    x = placing, 
+    y = mentions_per_100_articles, 
+    color = media, 
+    group = media
+  )) +
+  geom_line(linewidth = 1.2, alpha = 0.5) +
+  geom_point(size = 1.5, alpha = 0.8) +
+  scale_color_manual(
+    values = c("BBC" = "#012169", "DR" = "#C8102E", "ARD"="#FFCC00")) +
   labs(
-    title = "DR: all mentions of countries",
-    y = "Mentions per 100 articles"
+    title = "Distribution of Country Ranks",
+    x = "Country Rank (Placing)",
+    y = "Mentions per 100 Articles",
+    color = "Media Outlet" # This sets the legend title
   ) +
+  theme_fivethirtyeight() +
   theme(
-    axis.title.x = element_blank(),
     axis.title = element_text(),
-    axis.text.x = element_text(angle = 90, hjust = 1, size = 5),
+    legend.position = "bottom",
     text = element_text(family = "IBM Plex Mono"),
-    legend.title = element_text(size = 200),
-    legend.position = "none"
   )
 
+# Display the plot
+print(decay_plot)
 ```
 
-## World map
+Der zoomes ind, ved at frasortere 3 mest nævnte lande fra hvert medie
+
+```{r}
+decay_plot2 <- countries_as_placings |>
+   group_by(media) |>
+  arrange(desc(mentions_per_100_articles)) |>
+  slice(4:n()) |> ungroup() |>
+  ggplot(aes(
+    x = placing, 
+    y = mentions_per_100_articles, 
+    color = media, 
+    group = media
+  )) +
+  geom_line(linewidth = 1.2, alpha = 0.5) +
+  geom_point(size = 1.5, alpha = 0.5) +
+  scale_color_manual(
+    values = c("BBC" = "#012169", "DR" = "#C8102E", "ARD"="#FFCC00")) +
+  labs(
+    title = "Distribution of Country Ranks",
+    subtitle = "Excluding top 3 countries for each media",
+    x = "Country Rank (Placing)",
+    y = "Mentions per 100 Articles",
+    color = "Media Outlet" # This sets the legend title
+  ) +
+  theme_fivethirtyeight() +
+  theme(
+    axis.title = element_text(),
+    legend.position = "bottom",
+    text = element_text(family = "IBM Plex Mono"),
+  )
+
+# Display the plot
+print(decay_plot2)
+```
+
+DR omtaler færre lande end de to andre medier i alle dele af fordelingen.
+
+## World maps
 
 ```{r}
 country_totals_for_map <- country_analysis |>
@@ -366,7 +393,6 @@ map_plot <- ggplot(data = world_map_data) +
   ) +
   labs(
     title = "DR: Mentions of Countries",
-    subtitle = "Color intensity based on total mentions (Home Country: Red)"
   ) +
   theme_void() + 
   theme(
@@ -411,7 +437,6 @@ map_plot <- ggplot(data = world_map_data) +
   ) +
   labs(
     title = "BBC: Mentions of Countries",
-    subtitle = "Color intensity based on total mentions (Home Country: Red)"
   ) +
   theme_void() + 
   theme(
@@ -473,7 +498,7 @@ map_plot <- ggplot(data = world_map_data) +
   
   facet_wrap(~ media) +
   labs(
-    title = "Mentions of Countries Across Media Outlets",
+    title = "Mentions of Countries",
     subtitle = "Color intensity based on total mentions"
   ) +
   theme_void() + 
@@ -493,6 +518,8 @@ map_plot
 
 ## Violin plot
 
+Det her plot siger ikke så meget
+
 ```{r}
 
 violin_plot <- country_analysis |>
@@ -509,6 +536,7 @@ violin_plot <- country_analysis |>
   scale_x_reverse() + 
   labs(
     title = "Distribution of International News Coverage",
+    subtitle = "Excluding top 3 most mentioned countries",
     x = "Mentions per 100 Articles",
     y = "Media Outlet"
   ) +
@@ -528,7 +556,7 @@ violin_plot
 
 ```
 
-## Correlation (ikke fedt)
+## Correlation
 
 ```{r}
 wide_data <- country_analysis %>%
@@ -561,3 +589,5 @@ correlation_long <- as.data.frame(correlation_matrix) %>%
 
 print(correlation_long)
 ```
+
+Indsigt: DR og ARD skriver om meget ens lande
