@@ -288,7 +288,7 @@ t_test_DR_BBC <- per_day |>
     effect.size = "pes"
   )
 
-get_anova_table(t_test_DR_BBC)
+print(get_anova_table(t_test_DR_BBC))
 
 ```
 
