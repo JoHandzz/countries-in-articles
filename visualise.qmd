@@ -588,4 +588,4 @@ correlation_long <- as.data.frame(correlation_matrix) %>%
 print(correlation_long)
 ```
 
-Indsigt: DR og ARD skriver om meget ens lande
+Indsigt: DR og BBC skriver er mest forskellig
