@@ -368,9 +368,15 @@ DR omtaler færre lande end de to andre medier i alle dele af fordelingen.
 
 ## World maps
 
+### DR
+
 ```{r}
 country_totals_for_map <- country_analysis |>
   filter(media == 'DR') |>
+  mutate(mentions_per_100_articles = case_when(
+    mentions_per_100_articles > 25 ~ 25,
+    TRUE ~ mentions_per_100_articles  # more than 25 mentions = 25 menttions
+  )) |>
   group_by(countries) |>
   summarise(total_mentions = sum(mentions_per_100_articles), .groups = 'drop') |>
   mutate(name_for_join = case_when(
@@ -393,6 +399,7 @@ map_plot <- ggplot(data = world_map_data) +
   ) +
   labs(
     title = "DR: Mentions of Countries",
+    caption = "Dark red indicates 25 or more mentions"
   ) +
   theme_void() + 
   theme(
@@ -415,6 +422,10 @@ print(map_plot)
 ```{r}
 country_totals_for_map <- country_analysis |>
   filter(media == 'BBC') |>
+  mutate(mentions_per_100_articles = case_when(
+    mentions_per_100_articles > 25 ~ 25,
+    TRUE ~ mentions_per_100_articles  # more than 25 mentions = 25 menttions
+  )) |>
   group_by(countries) |>
   summarise(total_mentions = sum(mentions_per_100_articles), .groups = 'drop') |>
   mutate(name_for_join = case_when(
@@ -437,6 +448,7 @@ map_plot <- ggplot(data = world_map_data) +
   ) +
   labs(
     title = "BBC: Mentions of Countries",
+    caption = "Dark red indicates 25 or more mentions"
   ) +
   theme_void() + 
   theme(
@@ -451,55 +463,41 @@ map_plot <- ggplot(data = world_map_data) +
 
 # 5. Display the map plot
 print(map_plot)
+
 ```
 
-### facet - alle tre
+### ARD
 
 ```{r}
-
 country_totals_for_map <- country_analysis |>
-  group_by(media, countries) |>
+  filter(media == 'ARD') |>
+  mutate(mentions_per_100_articles = case_when(
+    mentions_per_100_articles > 25 ~ 25,
+    TRUE ~ mentions_per_100_articles  # more than 25 mentions = 25 menttions
+  )) |>
+  group_by(countries) |>
   summarise(total_mentions = sum(mentions_per_100_articles), .groups = 'drop') |>
-  mutate(name_for_join = countries)
+  mutate(name_for_join = case_when(
+    TRUE ~ countries
+  ))
 
 world_map <- ne_countries(scale = "medium", returnclass = "sf")
 
-media_outlets <- c("DR", "ARD", "BBC")
 
-map_template <- world_map |>
-  select(name, geometry) |>
-  # The use of st_drop_geometry() is key to separate the data and geometry before crossing
-  # Convert to a regular tibble for crossing, keeping 'name'
-  st_drop_geometry() %>% 
-  rename(name_for_join = name) %>%
-  # Use crossing to get all combinations of countries and media outlets
-  tidyr::crossing(media = media_outlets) 
+world_map_data <- world_map %>%
+  left_join(country_totals_for_map, by = c("name" = "name_for_join"))
 
-
-world_map_data <- map_template |>
-    left_join(world_map |> select(name, geometry), 
-              by = c("name_for_join" = "name"), 
-              relationship = "many-to-many") |>
-    st_as_sf() |>
-    left_join(country_totals_for_map, 
-              by = c("name_for_join", "media"), 
-              relationship = "many-to-many") |>
-    mutate(total_mentions = replace_na(total_mentions, 0))
-
-
+# Create the map plot
 map_plot <- ggplot(data = world_map_data) +
-  geom_sf(aes(fill = total_mentions), color = "white", linewidth = 0.2) +
+  geom_sf(aes(fill = total_mentions), color = "white", size = 0.2) +
   scale_fill_viridis_c(
-    option = "turbo",
+    option = "turbo", 
     na.value = "grey90", 
-    name = "Total Mentions\nper 100 Articles",
-    limits = c(0, max(world_map_data$total_mentions, na.rm = TRUE)) 
+    name = "Total Mentions\nper 100 Articles"
   ) +
-  
-  facet_wrap(~ media) +
   labs(
-    title = "Mentions of Countries",
-    subtitle = "Color intensity based on total mentions"
+    title = "ARD: Mentions of Countries",
+    caption = "Dark red indicates 25 or more mentions"
   ) +
   theme_void() + 
   theme(
@@ -509,11 +507,11 @@ map_plot <- ggplot(data = world_map_data) +
     legend.key.width = unit(2.5, "cm"),
     legend.title = element_text(size = 10, face = "bold"),
     legend.text = element_text(size = 9),
-    strip.text = element_text(size = 12, face = "bold"),
     text = element_text(family = "IBM Plex Mono")
   )
 
-map_plot
+# 5. Display the map plot
+print(map_plot)
 ```
 
 ## Violin plot
